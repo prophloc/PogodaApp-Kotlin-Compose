@@ -18,3 +18,17 @@ data class WeatherData(
     val weatherCode: Int,
     val forecast: List<ForecastDay>
 )
+
+data class SeasonalMonth(
+    val date: String,
+    val temperatureMean: Double?,
+    val temperatureAnomaly: Double?,
+    val precipitationMean: Double?,
+    val precipitationAnomaly: Double?
+)
+
+data class LongRangeWeatherData(
+    val city: String,
+    val country: String,
+    val months: List<SeasonalMonth>
+)

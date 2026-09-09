@@ -14,6 +14,12 @@ data class WeatherUiState(
     val error: String? = null
 )
 
+data class LongRangeUiState(
+    val weather: LongRangeWeatherData? = null,
+    val loading: Boolean = false,
+    val error: String? = null
+)
+
 class WeatherViewModel : ViewModel() {
 
     private val repository = WeatherRepository()
@@ -21,15 +27,29 @@ class WeatherViewModel : ViewModel() {
     var state by mutableStateOf(WeatherUiState())
         private set
 
+    var longRangeState by mutableStateOf(LongRangeUiState())
+        private set
+
+    private var longRangeCity: String? = null
+
     fun changeCity(city: String) {
-        state = state.copy(cityText = city)
+        state = state.copy(
+            cityText = city,
+            error = null
+        )
+
+        if (city.trim() != longRangeCity) {
+            longRangeState = LongRangeUiState()
+        }
     }
 
     fun search() {
         val city = state.cityText.trim()
 
         if (city.isEmpty()) {
-            state = state.copy(error = "Wpisz miasto")
+            state = state.copy(
+                error = "Wpisz miasto"
+            )
             return
         }
 
@@ -52,6 +72,46 @@ class WeatherViewModel : ViewModel() {
                     weather = null,
                     loading = false,
                     error = e.message ?: "Wystąpił błąd"
+                )
+            }
+        }
+    }
+
+    fun searchLongRange() {
+        val city = state.cityText.trim()
+
+        if (city.isEmpty()) {
+            longRangeState = LongRangeUiState(
+                error = "Wpisz miasto"
+            )
+            return
+        }
+
+        if (
+            longRangeCity == city &&
+            longRangeState.weather != null
+        ) {
+            return
+        }
+
+        viewModelScope.launch {
+            longRangeState = LongRangeUiState(
+                loading = true
+            )
+
+            try {
+                val weather =
+                    repository.getLongRangeWeather(city)
+
+                longRangeCity = city
+
+                longRangeState = LongRangeUiState(
+                    weather = weather
+                )
+            } catch (e: Exception) {
+                longRangeState = LongRangeUiState(
+                    error = e.message
+                        ?: "Nie udało się pobrać prognozy długoterminowej"
                 )
             }
         }
