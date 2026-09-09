@@ -53,22 +53,16 @@ UI
 
 ## Screenshot
 
-Dodaj screenshot aplikacji do folderu:
+
 
 ```text
 screenshots/pogoda.png
 ```
 
-GitHub wyświetli go tutaj:
 
 ![PogodaApp](screenshots/pogoda.png)
 
-## Uruchomienie
 
-1. Otwórz projekt w Android Studio.
-2. Poczekaj na zakończenie Gradle Sync.
-3. Uruchom aplikację na emulatorze lub urządzeniu z Androidem.
-4. Wpisz nazwę miasta i wybierz **Sprawdź pogodę**.
 
 ## Autor
 
