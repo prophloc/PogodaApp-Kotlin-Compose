@@ -16,60 +16,42 @@ data class WeatherUiState(
 
 class WeatherViewModel : ViewModel() {
 
-    private val repository =
-        WeatherRepository()
+    private val repository = WeatherRepository()
 
-    var state by mutableStateOf(
-        WeatherUiState()
-    )
+    var state by mutableStateOf(WeatherUiState())
         private set
 
     fun changeCity(city: String) {
-
-        state = state.copy(
-            cityText = city
-        )
+        state = state.copy(cityText = city)
     }
 
     fun search() {
-
-        val city =
-            state.cityText.trim()
+        val city = state.cityText.trim()
 
         if (city.isEmpty()) {
-
-            state = state.copy(
-                error = "Wpisz miasto"
-            )
-
+            state = state.copy(error = "Wpisz miasto")
             return
         }
 
         viewModelScope.launch {
-
             state = state.copy(
                 loading = true,
                 error = null
             )
 
             try {
-
-                val weather =
-                    repository.getWeather(city)
+                val weather = repository.getWeather(city)
 
                 state = state.copy(
                     weather = weather,
                     loading = false,
                     error = null
                 )
-
             } catch (e: Exception) {
-
                 state = state.copy(
                     weather = null,
                     loading = false,
-                    error = e.message
-                        ?: "Wystąpił błąd"
+                    error = e.message ?: "Wystąpił błąd"
                 )
             }
         }
