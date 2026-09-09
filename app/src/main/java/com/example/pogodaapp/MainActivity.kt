@@ -2,36 +2,42 @@ package com.example.pogodaapp
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,13 +45,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -53,11 +60,6 @@ import com.example.pogodaapp.ui.theme.PogodaAppTheme
 import java.text.SimpleDateFormat
 import java.util.Locale
 import kotlin.math.abs
-
-private enum class WeatherTab {
-    CURRENT,
-    LONG_RANGE
-}
 
 class MainActivity : ComponentActivity() {
 
@@ -79,20 +81,51 @@ fun WeatherScreen(
     val state = viewModel.state
     val longRangeState = viewModel.longRangeState
 
-    var selectedTab by rememberSaveable {
-        mutableStateOf(WeatherTab.CURRENT)
+    var showLongRange by rememberSaveable {
+        mutableStateOf(false)
     }
 
     val focusManager = LocalFocusManager.current
     val keyboardController =
         LocalSoftwareKeyboardController.current
 
+    val activity =
+        LocalContext.current as? ComponentActivity
+
     LaunchedEffect(Unit) {
         viewModel.search()
     }
 
+    DisposableEffect(
+        showLongRange,
+        activity
+    ) {
+        if (
+            showLongRange &&
+            activity != null
+        ) {
+            val callback =
+                object : OnBackPressedCallback(true) {
+                    override fun handleOnBackPressed() {
+                        focusManager.clearFocus()
+                        keyboardController?.hide()
+                        showLongRange = false
+                    }
+                }
+
+            activity.onBackPressedDispatcher
+                .addCallback(callback)
+
+            onDispose {
+                callback.remove()
+            }
+        } else {
+            onDispose { }
+        }
+    }
+
     val background =
-        if (selectedTab == WeatherTab.LONG_RANGE) {
+        if (showLongRange) {
             Brush.verticalGradient(
                 listOf(
                     Color(0xFF243B55),
@@ -100,222 +133,281 @@ fun WeatherScreen(
                 )
             )
         } else {
-            currentBackground(state.weather?.weatherCode)
+            currentBackground(
+                state.weather?.weatherCode
+            )
         }
 
-    Scaffold(
-        bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    selected =
-                        selectedTab == WeatherTab.CURRENT,
-                    onClick = {
-                        selectedTab = WeatherTab.CURRENT
-                        dismissKeyboard(
-                            focusManager = focusManager,
-                            hideKeyboard = {
-                                keyboardController?.hide()
-                            }
-                        )
-                    },
-                    icon = {
-                        Text(
-                            text = "☀️",
-                            fontSize = 20.sp
-                        )
-                    },
-                    label = {
-                        Text("Pogoda")
-                    }
-                )
-
-                NavigationBarItem(
-                    selected =
-                        selectedTab == WeatherTab.LONG_RANGE,
-                    onClick = {
-                        selectedTab = WeatherTab.LONG_RANGE
-                        dismissKeyboard(
-                            focusManager = focusManager,
-                            hideKeyboard = {
-                                keyboardController?.hide()
-                            }
-                        )
-                        viewModel.searchLongRange()
-                    },
-                    icon = {
-                        Text(
-                            text = "📅",
-                            fontSize = 20.sp
-                        )
-                    },
-                    label = {
-                        Text("Długoterminowa")
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(background)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = {
+                        focusManager.clearFocus()
+                        keyboardController?.hide()
                     }
                 )
             }
+    ) {
+        if (showLongRange) {
+            LongRangeScreen(
+                state = state,
+                longRangeState = longRangeState,
+                onCityChange = viewModel::changeCity,
+                onSearch = {
+                    focusManager.clearFocus()
+                    keyboardController?.hide()
+                    viewModel.searchLongRange()
+                }
+            )
+        } else {
+            CurrentWeatherScreen(
+                state = state,
+                onCityChange = viewModel::changeCity,
+                onSearch = {
+                    focusManager.clearFocus()
+                    keyboardController?.hide()
+                    viewModel.search()
+                },
+                onOpenLongRange = {
+                    focusManager.clearFocus()
+                    keyboardController?.hide()
+                    showLongRange = true
+                    viewModel.searchLongRange()
+                }
+            )
         }
-    ) { innerPadding ->
+    }
+}
+
+@Composable
+private fun CurrentWeatherScreen(
+    state: WeatherUiState,
+    onCityChange: (String) -> Unit,
+    onSearch: () -> Unit,
+    onOpenLongRange: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.statusBars)
+            .padding(
+                start = 20.dp,
+                end = 20.dp,
+                top = 10.dp,
+                bottom = 8.dp
+            ),
+        horizontalAlignment =
+            Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "Pogoda",
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White
+        )
+
+        Spacer(
+            modifier = Modifier.height(14.dp)
+        )
+
+        CityField(
+            value = state.cityText,
+            onValueChange = onCityChange,
+            onSearch = onSearch
+        )
+
+        Spacer(
+            modifier = Modifier.height(10.dp)
+        )
+
+        Button(
+            onClick = onSearch,
+            enabled = !state.loading,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            shape = RoundedCornerShape(18.dp)
+        ) {
+            Text(
+                text =
+                    if (state.loading) {
+                        "Pobieranie..."
+                    } else {
+                        "Sprawdź pogodę"
+                    }
+            )
+        }
+
+        Spacer(
+            modifier = Modifier.height(12.dp)
+        )
+
+        CurrentTabContent(
+            state = state,
+            modifier = Modifier.weight(1f)
+        )
+
         Box(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .background(background)
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onTap = {
-                            focusManager.clearFocus()
-                            keyboardController?.hide()
-                        }
-                    )
-                }
+                .fillMaxWidth()
+                .height(66.dp)
+                .padding(bottom = 7.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Column(
+            Row(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .clickable(
+                        onClick = onOpenLongRange
+                    )
                     .padding(
-                        start = 22.dp,
-                        end = 22.dp,
-                        top = 18.dp,
-                        bottom = 12.dp
+                        horizontal = 14.dp,
+                        vertical = 10.dp
                     ),
-                horizontalAlignment =
-                    Alignment.CenterHorizontally
+                verticalAlignment =
+                    Alignment.CenterVertically,
+                horizontalArrangement =
+                    Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = if (
-                        selectedTab == WeatherTab.CURRENT
-                    ) {
-                        "Pogoda"
-                    } else {
-                        "Prognoza długoterminowa"
-                    },
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    text = "📅",
+                    fontSize = 22.sp
                 )
 
-                Spacer(
-                    modifier = Modifier.height(16.dp)
+                Text(
+                    text = "Pogoda długoterminowa",
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
                 )
-
-                OutlinedTextField(
-                    value = state.cityText,
-                    onValueChange = viewModel::changeCity,
-                    placeholder = {
-                        Text(
-                            text = "Wpisz miasto",
-                            color = Color.Gray
-                        )
-                    },
-                    leadingIcon = {
-                        Text("📍")
-                    },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(62.dp),
-                    shape = RoundedCornerShape(20.dp),
-                    colors =
-                        OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor =
-                                Color.White.copy(
-                                    alpha = 0.96f
-                                ),
-                            unfocusedContainerColor =
-                                Color.White.copy(
-                                    alpha = 0.92f
-                                ),
-                            focusedBorderColor =
-                                Color.White,
-                            unfocusedBorderColor =
-                                Color.White.copy(
-                                    alpha = 0.75f
-                                ),
-                            focusedTextColor =
-                                Color.Black,
-                            unfocusedTextColor =
-                                Color.Black,
-                            cursorColor =
-                                Color(0xFF355C7D)
-                        )
-                )
-
-                Spacer(
-                    modifier = Modifier.height(12.dp)
-                )
-
-                Button(
-                    onClick = {
-                        focusManager.clearFocus()
-                        keyboardController?.hide()
-
-                        if (
-                            selectedTab ==
-                            WeatherTab.CURRENT
-                        ) {
-                            viewModel.search()
-                        } else {
-                            viewModel.searchLongRange()
-                        }
-                    },
-                    enabled =
-                        if (
-                            selectedTab ==
-                            WeatherTab.CURRENT
-                        ) {
-                            !state.loading
-                        } else {
-                            !longRangeState.loading
-                        },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    shape = RoundedCornerShape(18.dp)
-                ) {
-                    Text(
-                        text =
-                            if (
-                                selectedTab ==
-                                WeatherTab.CURRENT
-                            ) {
-                                if (state.loading) {
-                                    "Pobieranie..."
-                                } else {
-                                    "Sprawdź pogodę"
-                                }
-                            } else {
-                                if (
-                                    longRangeState.loading
-                                ) {
-                                    "Pobieranie..."
-                                } else {
-                                    "Sprawdź długoterminową"
-                                }
-                            }
-                    )
-                }
-
-                Spacer(
-                    modifier = Modifier.height(16.dp)
-                )
-
-                if (
-                    selectedTab ==
-                    WeatherTab.CURRENT
-                ) {
-                    CurrentTabContent(
-                        state = state,
-                        modifier = Modifier.weight(1f)
-                    )
-                } else {
-                    LongRangeTabContent(
-                        state = longRangeState,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
             }
         }
     }
+}
+
+@Composable
+private fun LongRangeScreen(
+    state: WeatherUiState,
+    longRangeState: LongRangeUiState,
+    onCityChange: (String) -> Unit,
+    onSearch: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.statusBars)
+            .padding(
+                start = 20.dp,
+                end = 20.dp,
+                top = 10.dp,
+                bottom = 12.dp
+            )
+    ) {
+        CityField(
+            value = state.cityText,
+            onValueChange = onCityChange,
+            onSearch = onSearch
+        )
+
+        Spacer(
+            modifier = Modifier.height(14.dp)
+        )
+
+        val locationName =
+            longRangeState.weather?.let {
+                "${it.city}, ${it.country}"
+            } ?: state.weather?.let {
+                "${it.city}, ${it.country}"
+            } ?: state.cityText
+
+        Text(
+            text = locationName,
+            color = Color.White,
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(
+            modifier = Modifier.height(2.dp)
+        )
+
+        Text(
+            text = "Prognoza długoterminowa",
+            color = Color.White.copy(
+                alpha = 0.80f
+            ),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium
+        )
+
+        Spacer(
+            modifier = Modifier.height(14.dp)
+        )
+
+        LongRangeTabContent(
+            state = longRangeState,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun CityField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onSearch: () -> Unit
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        placeholder = {
+            Text(
+                text = "Wpisz miasto",
+                color = Color.Gray
+            )
+        },
+        leadingIcon = {
+            Text("📍")
+        },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(
+            imeAction = ImeAction.Search
+        ),
+        keyboardActions = KeyboardActions(
+            onSearch = {
+                onSearch()
+            }
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(62.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors =
+            OutlinedTextFieldDefaults.colors(
+                focusedContainerColor =
+                    Color.White.copy(
+                        alpha = 0.96f
+                    ),
+                unfocusedContainerColor =
+                    Color.White.copy(
+                        alpha = 0.92f
+                    ),
+                focusedBorderColor =
+                    Color.White,
+                unfocusedBorderColor =
+                    Color.White.copy(
+                        alpha = 0.75f
+                    ),
+                focusedTextColor =
+                    Color.Black,
+                unfocusedTextColor =
+                    Color.Black,
+                cursorColor =
+                    Color(0xFF355C7D)
+            )
+    )
 }
 
 @Composable
@@ -326,7 +418,10 @@ private fun CurrentTabContent(
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement =
-            Arrangement.spacedBy(14.dp)
+            Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(
+            bottom = 6.dp
+        )
     ) {
         if (state.loading) {
             item {
@@ -367,8 +462,14 @@ private fun CurrentTabContent(
 
             item {
                 LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(150.dp),
                     horizontalArrangement =
-                        Arrangement.spacedBy(10.dp)
+                        Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(
+                        end = 4.dp
+                    )
                 ) {
                     itemsIndexed(
                         weather.forecast
@@ -392,7 +493,10 @@ private fun LongRangeTabContent(
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement =
-            Arrangement.spacedBy(12.dp)
+            Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(
+            bottom = 8.dp
+        )
     ) {
         if (state.loading) {
             item {
@@ -430,44 +534,6 @@ private fun LongRangeTabContent(
         }
 
         state.weather?.let { weather ->
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(22.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor =
-                            Color.White.copy(
-                                alpha = 0.94f
-                            )
-                    )
-                ) {
-                    Column(
-                        modifier =
-                            Modifier.padding(18.dp)
-                    ) {
-                        Text(
-                            text =
-                                "${weather.city}, ${weather.country}",
-                            fontSize = 21.sp,
-                            fontWeight =
-                                FontWeight.Bold
-                        )
-
-                        Spacer(
-                            modifier =
-                                Modifier.height(6.dp)
-                        )
-
-                        Text(
-                            text =
-                                "Prognoza sezonowa pokazuje trend dla kolejnych miesięcy, a nie dokładną pogodę na konkretny dzień.",
-                            fontSize = 13.sp,
-                            color = Color.Gray
-                        )
-                    }
-                }
-            }
-
             items(weather.months) { month ->
                 SeasonalMonthCard(month)
             }
@@ -568,7 +634,7 @@ fun CurrentWeatherCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(22.dp),
+                .padding(20.dp),
             horizontalAlignment =
                 Alignment.CenterHorizontally
         ) {
@@ -580,12 +646,12 @@ fun CurrentWeatherCard(
             )
 
             Spacer(
-                modifier = Modifier.height(8.dp)
+                modifier = Modifier.height(6.dp)
             )
 
             Text(
                 text = description.first,
-                fontSize = 50.sp
+                fontSize = 48.sp
             )
 
             Text(
@@ -594,13 +660,13 @@ fun CurrentWeatherCard(
             )
 
             Spacer(
-                modifier = Modifier.height(6.dp)
+                modifier = Modifier.height(4.dp)
             )
 
             Text(
                 text =
                     "${weather.temperature.toInt()}°",
-                fontSize = 58.sp,
+                fontSize = 56.sp,
                 fontWeight = FontWeight.Bold
             )
 
@@ -611,13 +677,13 @@ fun CurrentWeatherCard(
             )
 
             Spacer(
-                modifier = Modifier.height(18.dp)
+                modifier = Modifier.height(16.dp)
             )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement =
-                    Arrangement.spacedBy(12.dp)
+                    Arrangement.spacedBy(10.dp)
             ) {
                 WeatherInfoBox(
                     title = "Wilgotność",
@@ -650,7 +716,9 @@ fun ForecastCard(
         weatherDescription(day.weatherCode)
 
     Card(
-        modifier = Modifier.width(132.dp),
+        modifier = Modifier
+            .width(126.dp)
+            .height(142.dp),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor =
@@ -659,10 +727,12 @@ fun ForecastCard(
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
+                .fillMaxSize()
+                .padding(12.dp),
             horizontalAlignment =
-                Alignment.CenterHorizontally
+                Alignment.CenterHorizontally,
+            verticalArrangement =
+                Arrangement.Center
         ) {
             Text(
                 text =
@@ -676,12 +746,23 @@ fun ForecastCard(
             )
 
             Spacer(
-                modifier = Modifier.height(6.dp)
+                modifier = Modifier.height(4.dp)
             )
 
             Text(
                 text = description.first,
-                fontSize = 30.sp
+                fontSize = 29.sp
+            )
+
+            Spacer(
+                modifier = Modifier.height(3.dp)
+            )
+
+            Text(
+                text =
+                    "${day.maxTemperature.toInt()}° / ${day.minTemperature.toInt()}°",
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp
             )
 
             Spacer(
@@ -690,19 +771,8 @@ fun ForecastCard(
 
             Text(
                 text =
-                    "${day.maxTemperature.toInt()}° / ${day.minTemperature.toInt()}°",
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
-            )
-
-            Spacer(
-                modifier = Modifier.height(6.dp)
-            )
-
-            Text(
-                text =
                     "💧 ${day.precipitationProbability}%",
-                fontSize = 13.sp,
+                fontSize = 12.sp,
                 color = Color.Gray
             )
         }
@@ -722,17 +792,17 @@ fun WeatherInfoBox(
         color = Color(0xFFF3F5F7)
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(12.dp),
             horizontalAlignment =
                 Alignment.CenterHorizontally
         ) {
             Text(
                 text = emoji,
-                fontSize = 24.sp
+                fontSize = 23.sp
             )
 
             Spacer(
-                modifier = Modifier.height(4.dp)
+                modifier = Modifier.height(3.dp)
             )
 
             Text(
@@ -950,12 +1020,4 @@ private fun precipitationTrendText(
         else ->
             "💧 Opady zbliżone do normy"
     }
-}
-
-private fun dismissKeyboard(
-    focusManager: FocusManager,
-    hideKeyboard: () -> Unit
-) {
-    focusManager.clearFocus()
-    hideKeyboard()
 }
